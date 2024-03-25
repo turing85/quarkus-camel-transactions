@@ -11,6 +11,7 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.sql.SqlConstants;
 import org.apache.camel.component.sql.SqlOutputType;
 
+import static org.apache.camel.builder.endpoint.StaticEndpointBuilders.direct;
 import static org.apache.camel.builder.endpoint.StaticEndpointBuilders.scheduler;
 import static org.apache.camel.builder.endpoint.StaticEndpointBuilders.sql;
 
@@ -62,15 +63,20 @@ public class ReadThenCleanThenTransfer extends RouteBuilder {
                 .to(sql("DELETE FROM data")
                     .dataSource(source))
                 .log("done")
-                .log("transferring...")
-                .setBody(exchangeProperty(QUERY))
-                .removeProperty(QUERY)
-                .to(sql("query-in-body")
-                    .dataSource(target)
-                    .useMessageBodyForSql(true))
-                .log("done")
+                .to(direct("write"))
             .otherwise()
                 .log("No entries to transfer");
+
+    from(direct("write"))
+        .id("db write")
+        .transacted("PROPAGATION_REQUIRES_NEW")
+        .log("transferring...")
+        .setBody(exchangeProperty(QUERY))
+        .removeProperty(QUERY)
+        .to(sql("query-in-body")
+            .dataSource(target)
+            .useMessageBodyForSql(true))
+        .log("done");
     // @formatter:on
   }
 }
